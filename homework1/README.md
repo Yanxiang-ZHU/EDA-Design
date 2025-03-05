@@ -28,7 +28,7 @@ gcc -o netlist_generator netlist_generator.c
 ---
 
 ## 配置文件 `netlistConfig`
-程序会读取 `netlistConfig` 文件中的配置，格式如下：
+程序会读取 `netlistConfig` 文件中的配置，格式如下例：
 ```txt
 nVoltS 2
 nCurrS 1
@@ -52,10 +52,11 @@ bOpen 1
 ---
 
 ## 生成的网表文件 `netlistDump.sp`
-程序运行后，会在当前目录下生成 `netlistDump.sp`:
-
-格式：
+在代码中我们规定了网表文件的输出格式：
 ```
 <元件类型> <名称> <节点1> <节点2> <数值>
 ```
 ---
+我们自己创建了netlistConfig文件。对程序编译、运行后，在当前目录下生成了 `netlistDump.sp` ，符合项目的要求。
+
+
