@@ -3,8 +3,9 @@
 #include <string.h>
 #include <time.h>
 
-#define MAX_NODES 10000
+#define MAX_NODES 1000
 #define MAX_COMPONENTS 1000
+#define GROUND_NODE 0
 
 typedef struct {
     int nVoltS, nCurrS, nR, nC, nL, nShort, nLoop, bOpen;
@@ -13,115 +14,177 @@ typedef struct {
 typedef struct {
     char type[3];
     char name[10];
-    int node1, node2;
+    int node1;  // 修正点：统一使用node1/node2
+    int node2;  // 原错误使用的node_peer改为node2
     char value[20];
 } Component;
 
-int parent[MAX_NODES];
+// 全局状态管理
 Component components[MAX_COMPONENTS];
 int comp_count = 0;
+int parent[MAX_NODES];  // 并查集用于节点合并
+int node_usage[MAX_NODES] = {0};
+int current_max_node = GROUND_NODE;
 
+/* 并查集操作 */
 void dsu_init() {
-    for (int i = 0; i < MAX_NODES; i++) parent[i] = i;
+    for(int i=0; i<MAX_NODES; i++) parent[i] = i;
 }
 
-// find PARENT node
 int find(int x) {
-    return parent[x] == x ? x : (parent[x] = find(parent[x]));
+    return parent[x] = (parent[x] == x ? x : find(parent[x]));
 }
 
-void union_nodes(int a, int b) {
-    int ra = find(a), rb = find(b);
-    if (ra != rb) parent[rb] = ra;
+void merge_nodes(int a, int b) {
+    parent[find(b)] = find(a);
 }
 
-// read the config file
-void parse_config(const char* filename, Config* cfg) {
-    FILE* fp = fopen(filename, "r");
-    char key[20];
-    memset(cfg, 0, sizeof(Config));
-    
-    while (fscanf(fp, "%s", key) != EOF) {
-        if      (!strcmp(key, "nVoltS")) fscanf(fp, "%d", &cfg->nVoltS);
-        else if (!strcmp(key, "nCurrS")) fscanf(fp, "%d", &cfg->nCurrS);
-        else if (!strcmp(key, "nR"))     fscanf(fp, "%d", &cfg->nR);
-        else if (!strcmp(key, "nC"))     fscanf(fp, "%d", &cfg->nC);
-        else if (!strcmp(key, "nL"))     fscanf(fp, "%d", &cfg->nL);
-        else if (!strcmp(key, "nShort")) fscanf(fp, "%d", &cfg->nShort);
-        else if (!strcmp(key, "nLoop"))  fscanf(fp, "%d", &cfg->nLoop);
-        else if (!strcmp(key, "bOpen"))  fscanf(fp, "%d", &cfg->bOpen);
+/* 拓扑生成核心逻辑 */
+int generate_connected_node(int must_exist) {
+    if(must_exist || current_max_node == GROUND_NODE) {
+        // 强制连接现有节点
+        int attempts = 0;
+        do {
+            int node = rand() % (current_max_node + 1);
+            if(node_usage[node] > 0) return node;
+        } while(++attempts < 100);
     }
-    fclose(fp);
+    return ++current_max_node; // 生成新节点
 }
 
-void gen_nodes(int* n1, int* n2) {
-    do {
-        *n1 = rand() % 100;
-        *n2 = rand() % 100;
-        *n1 = find(*n1);
-        *n2 = find(*n2);
-    } while (*n1 == *n2);
-}
-
-void gen_value(char* buf, char type) {
-    switch(type) {
-        case 'V': case 'I':
-            sprintf(buf, "%d", rand()%100 + 1); break;
-        case 'R': 
-            sprintf(buf, "%d%c", rand()%1000 + 1, " kM"[rand()%3]); break;
-        case 'C':
-            sprintf(buf, "%.3f%c", (rand()%1000)/1000.0, "pnu"[rand()%3]); break;
-        case 'L':
-            sprintf(buf, "%d%c", rand()%1000 + 1, "nmu"[rand()%3]); break;
-    }
-}
-
-void gen_component(char type, int count) {
-    for (int i = 1; i <= count; i++) {
+void create_component(char type, int count) {
+    for(int i=0; i<count; i++) {
         Component* c = &components[comp_count++];
+        int base_node, peer_node;
+
+        // 电源类元件需要跨接已有节点
+        if(type == 'V' || type == 'I') {
+            base_node = generate_connected_node(1);
+            do {
+                peer_node = generate_connected_node(1);
+            } while(peer_node == base_node);
+        } 
+        // 无源元件至少一端连接现有节点
+        else {
+            base_node = generate_connected_node(1);
+            peer_node = generate_connected_node(rand()%3 == 0); // 30%概率生成新节点
+        }
+
+        // 记录节点使用情况
+        node_usage[base_node]++;
+        node_usage[peer_node]++;
+
+        // 生成元件属性
         sprintf(c->type, "%c", type);
-        sprintf(c->name, "%c%d", type, i);
-        gen_nodes(&c->node1, &c->node2);
-        gen_value(c->value, type);
+        sprintf(c->name, "%c%d", type, comp_count);
+        c->node1 = base_node;
+        c->node2 = peer_node;  // 修正点：使用正确的node2成员
+
+        // 生成随机参数
+        if(type == 'R') sprintf(c->value, "%d%c", rand()%1000+1, " kM"[rand()%3]);
+        else if(type == 'C') sprintf(c->value, "%.3f%c", (rand()%1000)/1000.0f, "pnu"[rand()%3]);
+        else if(type == 'L') sprintf(c->value, "%d%c", rand()%1000+1, "nmu"[rand()%3]);
+        else sprintf(c->value, "%d", rand()%100+1);
     }
 }
 
-void handle_open(Config cfg) {
-    if (!cfg.bOpen) return;
-    int n = rand()%100 + 100;
-    Component* c = &components[comp_count++];
-    strcpy(c->type, "R");
-    sprintf(c->name, "R%d", cfg.nR + 1);
-    c->node1 = find(rand()%100);
-    c->node2 = find(n);
-    gen_value(c->value, 'R');
+/* 特殊功能实现 */
+void apply_shorts(int n) {
+    for(int i=0; i<n; i++) {
+        int nodeA = rand() % current_max_node;
+        int nodeB;
+        do {
+            nodeB = rand() % current_max_node;
+        } while(nodeB == nodeA);
+        
+        merge_nodes(nodeA, nodeB);
+    }
+
+    // 应用节点合并到所有元件
+    for(int i=0; i<comp_count; i++) {
+        components[i].node1 = find(components[i].node1);
+        components[i].node2 = find(components[i].node2);  // 修正点
+    }
 }
 
+void create_loops(int n) {
+    for(int i=0; i<n; i++) {
+        int central = generate_connected_node(1);
+        int endpoints[3];
+        
+        // 创建三角环
+        for(int j=0; j<3; j++) {
+            endpoints[j] = generate_connected_node(0);
+            create_component('R', 1);
+            components[comp_count-1].node1 = central;
+            components[comp_count-1].node2 = endpoints[j];  // 修正点
+        }
+        
+        // 闭合环路
+        create_component('R', 1);
+        components[comp_count-1].node1 = endpoints[0];
+        components[comp_count-1].node2 = endpoints[1];  // 修正点
+    }
+}
+
+void apply_open_condition() {
+    if(comp_count == 0) return;
+    
+    // 选择最后一个元件断开连接
+    Component* c = &components[comp_count-1];
+    if(rand()%2) {
+        c->node1 = current_max_node + 1; // 悬空新节点
+    } else {
+        c->node2 = current_max_node + 1;  // 修正点
+    }
+    current_max_node++;
+}
+
+/* 主流程 */
 int main() {
     srand(time(NULL));
     dsu_init();
     Config cfg;
-    
-    parse_config("netlistConfig", &cfg);
-    
-    for (int i = 0; i < cfg.nShort; i++) 
-        union_nodes(rand()%100, rand()%100);
+    memset(&cfg, 0, sizeof(Config));
 
-    gen_component('V', cfg.nVoltS);
-    gen_component('I', cfg.nCurrS);
-    gen_component('R', cfg.nR);
-    gen_component('C', cfg.nC);
-    gen_component('L', cfg.nL);
-    
-    handle_open(cfg);
-    
-    FILE* fp = fopen("netlistDump.sp", "w");
-    for (int i = 0; i < comp_count; i++) {
-        Component* c = &components[i];
-        fprintf(fp, "%s %s %d %d %s\n", 
-               c->type, c->name, c->node1, c->node2, c->value);
+    // 读取配置文件
+    FILE* fp = fopen("netlistConfig", "r");
+    char key[20];
+    while(fscanf(fp, "%s", key) != EOF) {
+        if(!strcmp(key, "nVoltS")) fscanf(fp, "%d", &cfg.nVoltS);
+        else if(!strcmp(key, "nCurrS")) fscanf(fp, "%d", &cfg.nCurrS);
+        else if(!strcmp(key, "nR")) fscanf(fp, "%d", &cfg.nR);
+        else if(!strcmp(key, "nC")) fscanf(fp, "%d", &cfg.nC);
+        else if(!strcmp(key, "nL")) fscanf(fp, "%d", &cfg.nL);
+        else if(!strcmp(key, "nShort")) fscanf(fp, "%d", &cfg.nShort);
+        else if(!strcmp(key, "nLoop")) fscanf(fp, "%d", &cfg.nLoop);
+        else if(!strcmp(key, "bOpen")) fscanf(fp, "%d", &cfg.bOpen);
     }
     fclose(fp);
-    
+
+    // 生成基础元件
+    create_component('V', cfg.nVoltS);
+    create_component('I', cfg.nCurrS);
+    create_component('R', cfg.nR);
+    create_component('C', cfg.nC);
+    create_component('L', cfg.nL);
+
+    // 应用拓扑规则
+    apply_shorts(cfg.nShort);
+    create_loops(cfg.nLoop);
+    if(cfg.bOpen) apply_open_condition();
+
+    // 输出SPICE网表
+    fp = fopen("netlistDump.sp", "w");
+    for(int i=0; i<comp_count; i++) {
+        fprintf(fp, "%s %s %d %d %s\n",
+            components[i].type,
+            components[i].name,
+            components[i].node1,
+            components[i].node2,  // 修正点
+            components[i].value);
+    }
+    fclose(fp);
+
     return 0;
 }
