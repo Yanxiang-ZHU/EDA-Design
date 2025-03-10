@@ -83,9 +83,16 @@ int main()
             else if (key[0] == 'L') nL++;
         }
 
-        if (node1 && node2)
-            circuit.addConnection(node1, node2);
-
+        if (node1) {
+            if (node2) 
+                circuit.addConnection(node1, node2);
+            else
+                circuit.addConnection(node1, node1);
+        }
+        else {
+            if (node2) 
+                circuit.addConnection(node2, node2);
+        }
     }
     fclose(netlist);
 
