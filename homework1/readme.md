@@ -36,6 +36,8 @@ gcc -o generation generation.cpp
 | `netlistDump_withoutShort` | 代码的中间临时文件（未考虑短路的网表） |
 | `netlistDump.sp` | SPICE 网表文件（输出） |
 | `generation` | `generation.cpp` 的编译文件 |
+| `validation.cpp` | 验证代码 |
+| `validation` | `validation.cpp` 的编译文件 |
 
 ### 实现逻辑
 1. **默认条件：** 设定 `nLoop=1`，无短路与开路的特殊情况，将器件数目转换为 1 个独立电路。生成逻辑为：
