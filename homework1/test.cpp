@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#define MAX_NODES 1000000
+
 using namespace std;
 
 
@@ -61,6 +63,8 @@ int main()
     int nVoltS = 0, nCurrS = 0, nR = 0, nC = 0, nL = 0, 
         nShort = 0, nLoop = 0, bOpen = 0;
 
+    int node_cnt[MAX_NODES] = {0};
+
     while (!feof(netlist)) {
         char key[20], value[20];
         int node1, node2;
@@ -84,8 +88,11 @@ int main()
         }
 
         if (node1) {
-            if (node2) 
+            if (node2) {
                 circuit.addConnection(node1, node2);
+                node_cnt[node1]++;
+                node_cnt[node2]++;
+            }
             else
                 circuit.addConnection(node1, node1);
         }
@@ -98,6 +105,12 @@ int main()
 
     vector<vector<int>> independentCircuits = circuit.findIndependentCircuits();
     for (const auto& circuit : independentCircuits) nLoop++;
+
+    for (int i = 0; (i < MAX_NODES) && (!bOpen); i++) {
+        if (node_cnt[i] == 1) {
+            bOpen = 1;
+        }
+    }
 
     cout << "nVoltS" << '\t' << nVoltS << endl;
     cout << "nCurrS" << '\t' << nCurrS << endl;
