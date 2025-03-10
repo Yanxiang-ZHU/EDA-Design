@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#define MAX_NODES 10000
+#define MAX_NODES 100000
 
 int parent[MAX_NODES];
 
@@ -172,6 +172,7 @@ int* random_split(int total, int parts) {
     return result;
 }
 
+
 int check_conditions(int nR, int nL, int nC, int nShort, int nVoltS, int nCurrS) {
     return (nVoltS + nCurrS >= nShort) && (nR + nL + nC >= 2) && (nR + nL + nC >= nCurrS) && (nR + nL + nC - 1 >= nVoltS);
 }
@@ -196,7 +197,7 @@ SplitParams classify_components(ConfigParams params, int loop_num) {
     split.nVoltS_arr = (int *)malloc(loop_num * sizeof(int));
     split.nCurrS_arr = (int *)malloc(loop_num * sizeof(int));
     
-    for (int attempt = 0; attempt < 10000000; attempt++) {
+    for (int attempt = 0; attempt < 100000; attempt++) {
         int *R = random_split(params.nR, loop_num);
         int *L = random_split(params.nL, loop_num);
         int *C = random_split(params.nC, loop_num);
@@ -229,7 +230,7 @@ SplitParams classify_components(ConfigParams params, int loop_num) {
         free(Vs); free(Is); free(Shorts);
     }
     
-    fprintf(stderr, "Error: Failed to find valid distribution after 1000 attempts\n");
+    fprintf(stderr, "Error: Failed to find valid distribution after many attempts\n");
     return split;
 }
 

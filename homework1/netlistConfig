@@ -1,8 +1,8 @@
-nVoltS 	4000
-nCurrS 	4000
-nR 	    4000
-nC  	2000
-nL 	    2000
-nShort	20
-nLoop	400
+nVoltS 	15000
+nCurrS 	489
+nR 	    52000
+nC  	1234
+nL 	    33
+nShort	80
+nLoop	90
 bOpen 	1
