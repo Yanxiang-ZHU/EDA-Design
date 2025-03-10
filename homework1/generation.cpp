@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#define MAX_NODES 100000
+#define MAX_NODES 500000
 
 int parent[MAX_NODES];
 
