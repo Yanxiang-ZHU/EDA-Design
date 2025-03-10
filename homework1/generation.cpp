@@ -28,6 +28,11 @@ typedef struct {
 } SplitParams;
 
 typedef struct {
+    int ringNode;
+    int replace;
+} Replace;
+
+typedef struct {
     int nVoltS, nCurrS, nR, nC, nL, nShort, nLoop, bOpen;
 } ConfigParams;
 
@@ -99,8 +104,9 @@ void generate_rcl_loop(FILE* output, int nodes[], int* nodeCount, int nR, int nC
     }
 }
 
+
 // add Volt Source
-void add_voltage_sources(FILE* output, int nVoltS, int nodes[], int totalRCL, int* VoltS) {
+void add_voltage_sources(FILE* output, int nVoltS, int nodes[], int totalRCL, int* VoltS, int* nShort, Replace *replace, int* short_num) {
     // use usedNodes[] to avoid parallel voltage source
     int usedNodes[MAX_NODES] = {0};
     int ground = 0;
@@ -116,16 +122,22 @@ void add_voltage_sources(FILE* output, int nVoltS, int nodes[], int totalRCL, in
                 fprintf(stderr, "Error: Cannot find unique node for V%d\n", i);
                 return;
             }
-        } while (usedNodes[ringNode] == 1);
+        } while (usedNodes[ringNode] == 1 || ringNode == 0);
         usedNodes[ringNode] = 1;
         fprintf(output, "V%d %d %d 10V\n", *VoltS, ground, ringNode);
         (*VoltS)++;
+        if (*nShort) {
+            replace[(*short_num)].ringNode = ringNode;
+            replace[(*short_num)].replace = ground;
+            (*short_num)++;
+            (*nShort)--;
+        } 
         unite(ground, ringNode);
     }
 }
 
 // add Current Source
-void add_current_sources(FILE* output, int nCurrS, int nodes[], int totalRCL, int* CurrS) {
+void add_current_sources(FILE* output, int nCurrS, int nodes[], int totalRCL, int* CurrS, int* nShort, Replace *replace, int* short_num) {
     for (int i = 1; i <= nCurrS; i++) {
         int n1, n2;
         int attempts = 0;
@@ -141,48 +153,50 @@ void add_current_sources(FILE* output, int nCurrS, int nodes[], int totalRCL, in
         } while (n1 == n2);
         fprintf(output, "I%d %d %d 5mA\n", *CurrS, n1, n2);
         (*CurrS)++;
+        if (*nShort) {
+            replace[(*short_num)].ringNode = n2;
+            replace[(*short_num)].replace = n1;
+            (*short_num)++;
+            (*nShort)--;
+        }
         unite(n1, n2);
     }
 }
 
 
-int check_conditions(int nR, int nL, int nC, int nShort, int nVoltS, int nCurrS) {
-    return (nVoltS + nCurrS >= nShort) && (nR + nL + nC >= 2);
-}
-
 int* random_split(int total, int parts) {
     int *result = (int *) calloc(parts, sizeof(int));
-    for(int i=0; i<total; i++){
-        result[rand()%parts]++;
+    for(int i = 0; i < total; i++){
+        result[rand() % parts]++;
     }
     return result;
+}
+
+int check_conditions(int nR, int nL, int nC, int nShort, int nVoltS, int nCurrS) {
+    return (nVoltS + nCurrS >= nShort) && (nR + nL + nC >= 2) && (nR + nL + nC >= nCurrS) && (nR + nL + nC - 1 >= nVoltS);
 }
 
 SplitParams classify_components(ConfigParams params, int loop_num) {
     SplitParams split = {0};
     srand(time(NULL));
     int total_power = params.nVoltS + params.nCurrS;
-    if(total_power < params.nShort){
-        fprintf(stderr, "Error: Insufficient power sources (%d < %d)\n", 
-               total_power, params.nShort);
+    if (total_power < params.nShort) {
+        fprintf(stderr, "Error: Insufficient power sources (%d < %d)\n", total_power, params.nShort);
         return split;
     }
-
-    if((params.nR + params.nL + params.nC) < 2*loop_num){
-        fprintf(stderr, "Error: Insufficient components (%d < %d)\n",
-               params.nR+params.nL+params.nC, 2*loop_num);
+    if ((params.nR + params.nL + params.nC) < 2 * loop_num) {
+        fprintf(stderr, "Error: Insufficient components (%d < %d)\n", params.nR + params.nL + params.nC, 2 * loop_num);
         return split;
     }
-
-    split.nR_arr = (int *)malloc(loop_num*sizeof(int));
-    split.nL_arr = (int *)malloc(loop_num*sizeof(int));
-    split.nC_arr = (int *)malloc(loop_num*sizeof(int));
-    split.nShort_arr = (int *)malloc(loop_num*sizeof(int));
-    split.nVoltS_arr = (int *)malloc(loop_num*sizeof(int));
-    split.nCurrS_arr = (int *)malloc(loop_num*sizeof(int));
-
-    int valid = 0;
-    for(int attempt=0; attempt<1000; attempt++){ 
+    
+    split.nR_arr = (int *)malloc(loop_num * sizeof(int));
+    split.nL_arr = (int *)malloc(loop_num * sizeof(int));
+    split.nC_arr = (int *)malloc(loop_num * sizeof(int));
+    split.nShort_arr = (int *)malloc(loop_num * sizeof(int));
+    split.nVoltS_arr = (int *)malloc(loop_num * sizeof(int));
+    split.nCurrS_arr = (int *)malloc(loop_num * sizeof(int));
+    
+    for (int attempt = 0; attempt < 10000000; attempt++) {
         int *R = random_split(params.nR, loop_num);
         int *L = random_split(params.nL, loop_num);
         int *C = random_split(params.nC, loop_num);
@@ -190,42 +204,65 @@ SplitParams classify_components(ConfigParams params, int loop_num) {
         int *Is = random_split(params.nCurrS, loop_num);
         int *Shorts = random_split(params.nShort, loop_num);
 
-        valid = 1;
-        for(int i=0; i<loop_num; i++){
-            // condition1:
-            if(Vs[i]+Is[i] < Shorts[i]){ 
-                valid=0; 
-                break;
-            }
-            // condition2:
-            if(R[i]+L[i]+C[i] <2){ 
-                valid=0;
+        int valid = 1;
+        for (int i = 0; i < loop_num; i++) {
+            if (!check_conditions(R[i], L[i], C[i], Shorts[i], Vs[i], Is[i])) {
+                valid = 0;
                 break;
             }
         }
 
-        if(valid){
-            memcpy(split.nR_arr, R, loop_num*sizeof(int));
-            memcpy(split.nL_arr, L, loop_num*sizeof(int));
-            memcpy(split.nC_arr, C, loop_num*sizeof(int));
-            memcpy(split.nVoltS_arr, Vs, loop_num*sizeof(int));
-            memcpy(split.nCurrS_arr, Is, loop_num*sizeof(int));
-            memcpy(split.nShort_arr, Shorts, loop_num*sizeof(int));
+        if (valid) {
+            memcpy(split.nR_arr, R, loop_num * sizeof(int));
+            memcpy(split.nL_arr, L, loop_num * sizeof(int));
+            memcpy(split.nC_arr, C, loop_num * sizeof(int));
+            memcpy(split.nVoltS_arr, Vs, loop_num * sizeof(int));
+            memcpy(split.nCurrS_arr, Is, loop_num * sizeof(int));
+            memcpy(split.nShort_arr, Shorts, loop_num * sizeof(int));
             
             free(R); free(L); free(C);
             free(Vs); free(Is); free(Shorts);
             return split;
         }
-
+        
         free(R); free(L); free(C);
         free(Vs); free(Is); free(Shorts);
     }
-
+    
     fprintf(stderr, "Error: Failed to find valid distribution after 1000 attempts\n");
     return split;
 }
 
-
+void process_netlist(const char *input_file, const char *output_file, Replace replace[], int replace_count) {
+    FILE *fin = fopen(input_file, "r");
+    FILE *fout = fopen(output_file, "w");
+    if (!fin || !fout) {
+        fprintf(stderr, "Error: Unable to open file.\n");
+        return;
+    }
+    
+    char component[10];
+    int node1, node2;
+    char value[20];
+    
+    while (fscanf(fin, "%s %d %d %s", component, &node1, &node2, value) == 4) {
+        for (int i = 0; i < replace_count; i++) {
+            if (node1 == replace[i].ringNode) {
+                node1 = replace[i].replace;
+            }
+            if (node2 == replace[i].ringNode) {
+                node2 = replace[i].replace;
+            }
+        }
+        int ret = fprintf(fout, "%s %d %d %s\n", component, node1, node2, value);
+        if (ret < 0) {
+            printf("Write error!\n");
+        }
+    }
+    
+    fclose(fin);
+    fclose(fout);
+}
 
 void generate_netlist(const char* config_file, const char* output_file) {
     // read the config
@@ -264,13 +301,15 @@ void generate_netlist(const char* config_file, const char* output_file) {
 
     // seperate data to loop_num groups
     SplitParams split = classify_components(params, loop_num);
+    Replace replace[params.nShort];
+    int short_num = 0;
 
     for (int loop=0; loop<loop_num; loop++) {
         // generate the core circuit
         generate_rcl_loop(output, nodes, &nodeCount, split.nR_arr[loop], split.nC_arr[loop], split.nL_arr[loop], &R, &C, &L);
-        add_voltage_sources(output, split.nVoltS_arr[loop], nodes, split.nR_arr[loop] + split.nC_arr[loop] + split.nL_arr[loop], &VoltS);
-        add_current_sources(output, split.nCurrS_arr[loop], nodes, split.nR_arr[loop] + split.nC_arr[loop] + split.nL_arr[loop], &CurrS);
-        printf("successful for %d loops!!\n", loop);
+        add_voltage_sources(output, split.nVoltS_arr[loop], nodes, split.nR_arr[loop] + split.nC_arr[loop] + split.nL_arr[loop], &VoltS, &split.nShort_arr[loop], replace, &short_num);
+        add_current_sources(output, split.nCurrS_arr[loop], nodes, split.nR_arr[loop] + split.nC_arr[loop] + split.nL_arr[loop], &CurrS, &split.nShort_arr[loop], replace, &short_num);
+        // printf("successful for %d loops!!\n", loop);
     }
 
     if (params.bOpen) {
@@ -279,14 +318,15 @@ void generate_netlist(const char* config_file, const char* output_file) {
         } else if (open_choose == 2) {
             fprintf(output, "V%d %d %d 10V\n", params.nCurrS, 0, nodeCount);
         }
-        printf("successful for open case!!\n");
+        // printf("successful for open case!!\n");
     }
-
     fclose(output);
+
+    process_netlist("netlistDump_withoutShort", "netlistDump.sp", replace, params.nShort);
 }
 
 int main() {
-    generate_netlist("netlistConfig", "netlistDump.sp");
+    generate_netlist("netlistConfig", "netlistDump_withoutShort");
     printf("Success!\n");
     return 0;
 }
