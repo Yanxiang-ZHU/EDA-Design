@@ -1,8 +1,8 @@
-nVoltS 	2
-nCurrS 	2
-nR 	    2
+nVoltS 	4
+nCurrS 	4
+nR 	    4
 nC  	2
 nL 	    2
-nShort	0
-nLoop	1
-bOpen 	0
+nShort	1
+nLoop	4
+bOpen 	1
