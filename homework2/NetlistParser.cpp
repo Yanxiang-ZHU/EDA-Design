@@ -122,12 +122,28 @@ void dfs(int v, bool* visited, ElementArray* vs, ElementArray* is, bool* has_pow
     }
 }
 
+void dfs_component(int v, bool* visited, int comp_id, int* component, bool* has_power) {
+    if (visited[v]) return;
+    visited[v] = true;
+    component[v] = comp_id;
+    // chech if it is connected to sources
+    Node* n = find_or_insert_node(v);
+    for (Connection* c = n->conns; c; c = c->next) {
+        if (c->type == 'V' || c->type == 'I') {
+            has_power[comp_id] = true;
+        }
+    }
+    // traversing adjacent nodes
+    for (AdjNode* a = adj[v].head; a; a = a->next) {
+        dfs_component(a->id, visited, comp_id, component, has_power);
+    }
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <input.sp>\n", argv[0]);
         return 1;
     }
-
     // open the spice file (need to get the filename, like 'check')
     FILE* fin = fopen(argv[1], "r");
     if (!fin) {
@@ -246,31 +262,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // step4: calculating the amount of float
-    int nFloat = 0;
-    ElementArray* arrays[] = {&voltage_sources, &current_sources, &resistors, &inductors, &capacitors};
-    int sizes[] = {nVoltS, nCurrS, nR, nL, nC};
-    for (int a = 0; a < 5; a++) {
-        for (int i = 0; i < sizes[a]; i++) {
-            int n1 = arrays[a]->elements[i].node1;
-            int n2 = arrays[a]->elements[i].node2;
-            Node* node1 = find_or_insert_node(n1);
-            Connection* c = node1->conns;
-            int degree1 = 0;
-            for (; c; c = c->next) degree1++;
-            bool float1 = (degree1 == 1);
-            bool float2 = false;
-            if (n1 != n2) {
-                Node* node2 = find_or_insert_node(n2);
-                c = node2->conns;
-                int degree2 = 0;
-                for (; c; c = c->next) degree2++;
-                float2 = (degree2 == 1);
-            }
-            if (float1 || float2) nFloat++;
-        }
-    }
-
     // create the graph (grounding elements not under consideration)
     for (int i = 0; i < nVoltS; i++) {
         int n1 = voltage_sources.elements[i].node1;
@@ -298,17 +289,45 @@ int main(int argc, char* argv[]) {
         if (n1 != 0 && n2 != 0 && n1 != n2) add_edge(n1, n2);
     }
 
-    // step5: calculating the amount of circuits
+    // step4: calculating the amount of float
     bool* visited = (bool*)calloc(num_nodes, sizeof(bool));
-    int nCircuit = 0;
-    for (int v = 1; v < num_nodes; v++) { // starting from 1st node (ground not in consideration)
+    bool* has_power = (bool*)calloc(num_nodes, sizeof(bool));
+    int* component = (int*)malloc(num_nodes * sizeof(int));
+    int comp_id = 0;
+    for (int v = 0; v < num_nodes; v++) {
         if (!visited[v]) {
-            bool has_power = false;
-            dfs(v, visited, &voltage_sources, &current_sources, &has_power);
-            if (has_power) nCircuit++;
+            dfs_component(v, visited, comp_id, component, has_power);
+            comp_id++;
         }
     }
     free(visited);
+    int nFloat = 0;
+    ElementArray* passive_arrays[] = {&resistors, &capacitors, &inductors};
+    int passive_sizes[] = {nR, nC, nL};
+    for (int a = 0; a < 3; a++) {
+        for (int i = 0; i < passive_sizes[a]; i++) {
+            int n1 = passive_arrays[a]->elements[i].node1;
+            int n2 = passive_arrays[a]->elements[i].node2;
+            if (n1 >= num_nodes || n2 >= num_nodes) continue;
+            int comp_n1 = component[n1];
+            int comp_n2 = component[n2];
+            if (comp_n1 == comp_n2 && !has_power[comp_n1]) {
+                nFloat++;
+            }
+        }
+    }
+
+    // step5: calculating the amount of circuits
+    bool* visit = (bool*)calloc(num_nodes, sizeof(bool));
+    int nCircuit = 0;
+    for (int v = 1; v < num_nodes; v++) { // starting from 1st node (ground not in consideration)
+        if (!visit[v]) {
+            bool power = false;
+            dfs(v, visit, &voltage_sources, &current_sources, &power);
+            if (power) nCircuit++;
+        }
+    }
+    free(visit);
 
     // output into csv file
     FILE* fout = fopen("NetlistReport.csv", "w");
