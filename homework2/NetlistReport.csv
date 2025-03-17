@@ -1,9 +1,9 @@
-nVoltS, 1
+nVoltS, 6
 nCurrS, 0
-nR, 3
-nC, 0
+nR, 2
+nC, 1
 nL, 0
-nShort, 0
-nOpen, 2
-nFloat, 2
-nCircuit, 1
+nShort, 2
+nOpen, 3
+nFloat, 0
+nCircuit, 3

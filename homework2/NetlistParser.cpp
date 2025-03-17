@@ -99,10 +99,15 @@ void add_edge(int n1, int n2) {
         }
         num_nodes = new_size;
     }
-    AdjNode* node = (AdjNode*)malloc(sizeof(AdjNode));
-    node->id = n2;
-    node->next = adj[n1].head;
-    adj[n1].head = node;
+    AdjNode* node1 = (AdjNode*)malloc(sizeof(AdjNode));
+    node1->id = n2;
+    node1->next = adj[n1].head;
+    adj[n1].head = node1;
+
+    AdjNode* node2 = (AdjNode*)malloc(sizeof(AdjNode));
+    node2->id = n1;
+    node2->next = adj[n2].head;
+    adj[n2].head = node2;
 }
 
 // find the connection via depth first search argorithm
@@ -122,10 +127,14 @@ void dfs(int v, bool* visited, ElementArray* vs, ElementArray* is, bool* has_pow
     }
 }
 
-void dfs_component(int v, bool* visited, int comp_id, int* component, bool* has_power) {
+void dfs_component(int v, bool* visited, int comp_id, int* component, bool* has_power, bool* has_ground) {
     if (visited[v]) return;
     visited[v] = true;
     component[v] = comp_id;
+    // check if it is connected to the ground node
+    if (v==0) {
+        has_ground[comp_id] = true;
+    }
     // chech if it is connected to sources
     Node* n = find_or_insert_node(v);
     for (Connection* c = n->conns; c; c = c->next) {
@@ -135,7 +144,7 @@ void dfs_component(int v, bool* visited, int comp_id, int* component, bool* has_
     }
     // traversing adjacent nodes
     for (AdjNode* a = adj[v].head; a; a = a->next) {
-        dfs_component(a->id, visited, comp_id, component, has_power);
+        dfs_component(a->id, visited, comp_id, component, has_power, has_ground);
     }
 }
 
@@ -203,27 +212,29 @@ int main(int argc, char* argv[]) {
     int nR = resistors.size;
     int nC = capacitors.size;
     int nL = inductors.size;
+    int short_circuit_source=0;
 
     // step2: calculating the amount of short
     int nShort = 0;
-    // case1 -- directly connect two nodes of VoltSource together
-    for (int i = 0; i < nVoltS; i++) {
-        if (voltage_sources.elements[i].node1 == voltage_sources.elements[i].node2) {
-            nShort++;
-        }
-    }
     // case2 -- multiple VoltSources in parallel
     int* pair_count = (int*)calloc(HASH_SIZE, sizeof(int));
     for (int i = 0; i < nVoltS; i++) {
         int n1 = voltage_sources.elements[i].node1;
         int n2 = voltage_sources.elements[i].node2;
-        if (n1 != n2) {
-            int min_n = n1 < n2 ? n1 : n2;
-            int max_n = n1 > n2 ? n1 : n2;
-            unsigned int h = hash(min_n * HASH_SIZE + max_n);
-            pair_count[h]++;
-            if (pair_count[h] == 2) nShort++;    // only add nShort when pair_count==2, no counting after it (even 3 or more pairs)
-        }
+        int min_n = n1 < n2 ? n1 : n2;
+        int max_n = n1 > n2 ? n1 : n2;
+        unsigned int h = hash(min_n * HASH_SIZE + max_n);
+        pair_count[h]++;
+        if (pair_count[h] == 2) nShort++;    // only add nShort when pair_count==2, no counting after it (even 3 or more pairs)
+    }
+    // case1 -- directly connect two nodes of VoltSource together
+    for (int i = 0; i < nVoltS; i++) {
+        int n1 = voltage_sources.elements[i].node1;
+        int n2 = voltage_sources.elements[i].node2;
+        int min_n = n1 < n2 ? n1 : n2;
+        int max_n = n1 > n2 ? n1 : n2;
+        unsigned int h = hash(min_n * HASH_SIZE + max_n);
+        if (pair_count[h] == 1 && n1 == n2) nShort++;
     }
     free(pair_count);
 
@@ -262,41 +273,44 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // create the graph (grounding elements not under consideration)
+    // create the graph
     for (int i = 0; i < nVoltS; i++) {
         int n1 = voltage_sources.elements[i].node1;
         int n2 = voltage_sources.elements[i].node2;
-        if (n1 != 0 && n2 != 0 && n1 != n2) add_edge(n1, n2);
+        if (n1 != n2) add_edge(n1, n2);
+        if (n1 == 0 && n2 == 0) short_circuit_source++;
     }
     for (int i = 0; i < nCurrS; i++) {
         int n1 = current_sources.elements[i].node1;
         int n2 = current_sources.elements[i].node2;
-        if (n1 != 0 && n2 != 0 && n1 != n2) add_edge(n1, n2);
+        if (n1 != n2) add_edge(n1, n2);
+        if (n1 == 0 && n2 == 0) short_circuit_source++;
     }
     for (int i = 0; i < nR; i++) {
         int n1 = resistors.elements[i].node1;
         int n2 = resistors.elements[i].node2;
-        if (n1 != 0 && n2 != 0 && n1 != n2) add_edge(n1, n2);
+        if (n1 != n2) add_edge(n1, n2);
     }
     for (int i = 0; i < nL; i++) {
         int n1 = inductors.elements[i].node1;
         int n2 = inductors.elements[i].node2;
-        if (n1 != 0 && n2 != 0 && n1 != n2) add_edge(n1, n2);
+        if (n1 != n2) add_edge(n1, n2);
     }
     for (int i = 0; i < nC; i++) {
         int n1 = capacitors.elements[i].node1;
         int n2 = capacitors.elements[i].node2;
-        if (n1 != 0 && n2 != 0 && n1 != n2) add_edge(n1, n2);
+        if (n1 != n2) add_edge(n1, n2);
     }
 
     // step4: calculating the amount of float
     bool* visited = (bool*)calloc(num_nodes, sizeof(bool));
     bool* has_power = (bool*)calloc(num_nodes, sizeof(bool));
+    bool* has_ground = (bool*)calloc(num_nodes, sizeof(bool));
     int* component = (int*)malloc(num_nodes * sizeof(int));
     int comp_id = 0;
     for (int v = 0; v < num_nodes; v++) {
         if (!visited[v]) {
-            dfs_component(v, visited, comp_id, component, has_power);
+            dfs_component(v, visited, comp_id, component, has_power, has_ground);
             comp_id++;
         }
     }
@@ -311,7 +325,7 @@ int main(int argc, char* argv[]) {
             if (n1 >= num_nodes || n2 >= num_nodes) continue;
             int comp_n1 = component[n1];
             int comp_n2 = component[n2];
-            if (comp_n1 == comp_n2 && !has_power[comp_n1]) {
+            if (comp_n1 == comp_n2 && !has_power[comp_n1] && !has_ground[comp_n1]) {
                 nFloat++;
             }
         }
@@ -319,7 +333,7 @@ int main(int argc, char* argv[]) {
 
     // step5: calculating the amount of circuits
     bool* visit = (bool*)calloc(num_nodes, sizeof(bool));
-    int nCircuit = 0;
+    int nCircuit = short_circuit_source;
     for (int v = 1; v < num_nodes; v++) { // starting from 1st node (ground not in consideration)
         if (!visit[v]) {
             bool power = false;
