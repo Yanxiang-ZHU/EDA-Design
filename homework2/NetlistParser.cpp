@@ -23,7 +23,7 @@ typedef struct Node {
     struct Node* next;
 } Node;
 
-#define HASH_SIZE 10000000
+#define HASH_SIZE 100000000
 Node* hash_table[HASH_SIZE] = {NULL};
 
 unsigned int hash(int key) {
@@ -121,7 +121,7 @@ void dfs(int v, bool* visited, ElementArray* vs, ElementArray* is, bool* has_pow
         }
     }
     for (AdjNode* a = adj[v].head; a; a = a->next) {
-        if (!visited[a->id]) {
+        if (!visited[a->id] && a->id!=0) {      // avoid connect to ground node (because ground node would connect to other circuits unexpectedly)
             dfs(a->id, visited, vs, is, has_power);      // loop of DFS argorithm here
         }
     }
@@ -212,22 +212,22 @@ int main(int argc, char* argv[]) {
     int nR = resistors.size;
     int nC = capacitors.size;
     int nL = inductors.size;
-    int short_circuit_source=0;
+    // int short_circuit_source=0;     // no consideration for source both sides connected to ground in this project!
 
     // step2: calculating the amount of short
     int nShort = 0;
-    // case2 -- multiple VoltSources in parallel
+    // case1 -- multiple VoltSources in parallel (prior than case2)
     int* pair_count = (int*)calloc(HASH_SIZE, sizeof(int));
     for (int i = 0; i < nVoltS; i++) {
         int n1 = voltage_sources.elements[i].node1;
         int n2 = voltage_sources.elements[i].node2;
         int min_n = n1 < n2 ? n1 : n2;
         int max_n = n1 > n2 ? n1 : n2;
-        unsigned int h = hash(min_n * HASH_SIZE + max_n);
+        unsigned int h = hash(min_n * HASH_SIZE * HASH_SIZE + max_n);
         pair_count[h]++;
-        if (pair_count[h] == 2) nShort++;    // only add nShort when pair_count==2, no counting after it (even 3 or more pairs)
+        if (pair_count[h] == 2) nShort++;   // only add nShort when pair_count==2, no counting after it (even 3 or more pairs)
     }
-    // case1 -- directly connect two nodes of VoltSource together
+    // case2 -- directly connect two nodes of VoltSource together
     for (int i = 0; i < nVoltS; i++) {
         int n1 = voltage_sources.elements[i].node1;
         int n2 = voltage_sources.elements[i].node2;
@@ -280,13 +280,13 @@ int main(int argc, char* argv[]) {
         int n1 = voltage_sources.elements[i].node1;
         int n2 = voltage_sources.elements[i].node2;
         if (n1 != n2) add_edge(n1, n2);
-        if (n1 == 0 && n2 == 0) short_circuit_source++;
+        // if (n1 == 0 && n2 == 0) short_circuit_source++;
     }
     for (int i = 0; i < nCurrS; i++) {
         int n1 = current_sources.elements[i].node1;
         int n2 = current_sources.elements[i].node2;
         if (n1 != n2) add_edge(n1, n2);
-        if (n1 == 0 && n2 == 0) short_circuit_source++;
+        // if (n1 == 0 && n2 == 0) short_circuit_source++;
     }
     for (int i = 0; i < nR; i++) {
         int n1 = resistors.elements[i].node1;
@@ -335,7 +335,7 @@ int main(int argc, char* argv[]) {
 
     // step5: calculating the amount of circuits
     bool* visit = (bool*)calloc(num_nodes, sizeof(bool));
-    int nCircuit = short_circuit_source;
+    int nCircuit = 0;  // do not consider cases that both sides of the source are connected to ground(0). [If considered, substitute 0 with short_circuit_source]
     for (int v = 1; v < num_nodes; v++) { // starting from 1st node (ground not in consideration)
         if (!visit[v]) {
             bool power = false;
