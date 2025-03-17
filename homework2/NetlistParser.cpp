@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <time.h>
+
+#define BORDER_CHAR '*'
+#define BORDER_WIDTH 45
 
 typedef struct {
     int node1;
@@ -148,15 +152,48 @@ void dfs_component(int v, bool* visited, int comp_id, int* component, bool* has_
     }
 }
 
+// generate log file (redirecting)
+void logSummary(FILE *logFile, const char *message) {
+    fprintf(logFile, "* %-38s\n", message);
+}
+
+// interesting decoration (create border!)
+void printBorder(FILE *file) {
+    for (int i = 0; i < BORDER_WIDTH; i++) {
+        fprintf(file, "%c", BORDER_CHAR);
+    }
+    fprintf(file, "\n");
+}
+
 int main(int argc, char* argv[]) {
+    FILE *logFile = fopen("RunSummary.txt", "w");
+    if (logFile == NULL) {
+        printf("Can't create RunSummary.txt\n");
+        return 1;
+    }
+
+    printBorder(logFile);
+    logSummary(logFile, "SOFTWARE NAME: ZYX-EDA NetlistParser");
+    logSummary(logFile, "DEVELOPER: ZHU Yanxiang");
+    logSummary(logFile, "VERSION: 1.0.0");
+    logSummary(logFile, "RELEASE DATE: 2025-03-20");
+
+    // record the starting time
+    time_t start_time = time(NULL);
+    fprintf(logFile, "* RUN START: %s", ctime(&start_time));
+    int error_state = 0;   // if error occurs, turn the state to 1, and output the error info in the end
+    char errorMsg[300];
+    strcpy(errorMsg, "Error somewhere. Need further examing!"); 
+    // if the error is not specified errors we labeled, output the error info like this
+
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s <input.sp>\n", argv[0]);
+        sprintf(errorMsg, "ERROR Usage: %s <input.sp>\n", argv[0]);
         return 1;
     }
     // open the spice file (need to get the filename, like 'check')
     FILE* fin = fopen(argv[1], "r");
     if (!fin) {
-        fprintf(stderr, "Cannot open file %s\n", argv[1]);
+        sprintf(errorMsg, "ERROR: Cannot open file %s\n", argv[1]);
         return 1;
     }
 
@@ -170,14 +207,17 @@ int main(int argc, char* argv[]) {
 
     // analyze the file
     char line[256];
+    int count_components = 0;
     while (fgets(line, sizeof(line), fin)) {
         if (line[0] == '*' || line[0] == '\n') continue;   // dismiss other infomation
         char type = line[0];
         int node1, node2;
         double value;
         if (sscanf(line, "%*s %d %d %lf", &node1, &node2, &value) != 3) {
-            fprintf(stderr, "Invalid line: %s", line);
+            sprintf(errorMsg, "ERROR: Invalid line: %s", line);
             continue;
+        } else {
+            count_components++;
         }
 
         Node* n1 = find_or_insert_node(node1);
@@ -233,7 +273,7 @@ int main(int argc, char* argv[]) {
         int n2 = voltage_sources.elements[i].node2;
         int min_n = n1 < n2 ? n1 : n2;
         int max_n = n1 > n2 ? n1 : n2;
-        unsigned int h = hash(min_n * HASH_SIZE + max_n);
+        unsigned int h = hash(min_n * HASH_SIZE * HASH_SIZE + max_n);
         if (pair_count[h] == 1 && n1 == n2) nShort++;
     }
     free(pair_count);
@@ -347,6 +387,10 @@ int main(int argc, char* argv[]) {
 
     // output into csv file
     FILE* fout = fopen("NetlistReport.csv", "w");
+    if (fout == NULL) {
+        strcpy(errorMsg, "Error: Can't create file NetlistReport.csv");
+        return 1;
+    }
     fprintf(fout, "nVoltS, %d\n", nVoltS);
     fprintf(fout, "nCurrS, %d\n", nCurrS);
     fprintf(fout, "nR, %d\n", nR);
@@ -388,6 +432,20 @@ int main(int argc, char* argv[]) {
         }
     }
     free(adj);
+
+
+    // record the end of software
+    time_t end_time = time(NULL);
+    fprintf(logFile, "* RUN END:   %s", ctime(&end_time));
+    fprintf(logFile, "* TOTAL OPERATING DURATION: %ld seconds\n", end_time - start_time);
+    fprintf(logFile, "* TOTAL COMPONENTS: %-38d\n", count_components);
+
+    if (error_state==0) {
+        fprintf(logFile, "* %s\n", "INFO: Run successfully. (0 error).");
+    } else if (error_state==1) {
+        logSummary(logFile, errorMsg);
+    }
+    printBorder(logFile);
 
     return 0;
 }
