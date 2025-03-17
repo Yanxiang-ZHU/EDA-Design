@@ -175,7 +175,7 @@ int main(int argc, char* argv[]) {
         char type = line[0];
         int node1, node2;
         double value;
-        if (sscanf(line + 2, "%d %d %lf", &node1, &node2, &value) != 3) {
+        if (sscanf(line, "%*s %d %d %lf", &node1, &node2, &value) != 3) {
             fprintf(stderr, "Invalid line: %s", line);
             continue;
         }
@@ -243,12 +243,13 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < nVoltS; i++) {
         int n1 = voltage_sources.elements[i].node1;
         int n2 = voltage_sources.elements[i].node2;
-        Node* node1 = find_or_insert_node(n1);
-        Connection* c = node1->conns;
-        int degree1 = 0;
-        for (; c; c = c->next) degree1++;
-        if (degree1 == 1) nOpen++;
         if (n1 != n2) {
+            Node* node1 = find_or_insert_node(n1);
+            Connection* c = node1->conns;
+            int degree1 = 0;
+            for (; c; c = c->next) degree1++;
+            if (degree1 == 1) nOpen++;
+
             Node* node2 = find_or_insert_node(n2);
             c = node2->conns;
             int degree2 = 0;
@@ -259,12 +260,13 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < nCurrS; i++) {
         int n1 = current_sources.elements[i].node1;
         int n2 = current_sources.elements[i].node2;
-        Node* node1 = find_or_insert_node(n1);
-        Connection* c = node1->conns;
-        int degree1 = 0;
-        for (; c; c = c->next) degree1++;
-        if (degree1 == 1) nOpen++;
         if (n1 != n2) {
+            Node* node1 = find_or_insert_node(n1);
+            Connection* c = node1->conns;
+            int degree1 = 0;
+            for (; c; c = c->next) degree1++;
+            if (degree1 == 1) nOpen++;
+
             Node* node2 = find_or_insert_node(n2);
             c = node2->conns;
             int degree2 = 0;
