@@ -6,6 +6,7 @@
 
 #define BORDER_CHAR '*'
 #define BORDER_WIDTH 45
+#define FLOAT_NODE_MAX 100000000
 
 typedef struct {
     int node1;
@@ -178,6 +179,66 @@ void log_run_end(FILE* logFile, time_t start_time, int count_components, int err
     printBorder(logFile);
 }
 
+// the complex task for floating components (detail: fprintf to logfile; fix: generate a new file without floating components)
+int process_circuit_file(bool detail, bool fix, int float_node_index, int* float_node, FILE* logFile, char* file_name) {
+    char line[256];
+    FILE* fin = fopen(file_name, "r");
+    FILE* fout_sp = NULL;
+    char errorMsg[256];
+    int error_state = 0;
+    int count_line = 0;
+    if (fix) {
+        fout_sp = fopen("TrimedNetlist.sp", "w");
+    }
+    if (detail) {
+        fprintf(logFile, "*\n---------- FLOATING COMPONENTS LIST START: ----------\n");
+    }
+    while (fgets(line, sizeof(line), fin)) {
+        if (line[0] == '*' || line[0] == '\n') {
+            if (fix) fprintf(fout_sp, "%s", line);
+            continue;
+        }
+        char component[32];
+        int node1, node2;
+        double value;
+        sscanf(line, "%s %d %d %lf", component, &node1, &node2, &value) != 4;
+
+        bool node_match = false;
+        char match_output[256] = "";
+        char temp[64];
+        for (int i = 0; i < float_node_index; i++) {
+            if (node1 == float_node[i] || node2 == float_node[i]) {
+                node_match = true;
+                if (detail) {
+                    sprintf(match_output, "%s", component);
+                }
+            }
+        }
+
+        if (detail && node_match) {
+            fprintf(logFile, "%s ", match_output);
+            count_line++;
+            if (count_line == 10) {
+                count_line = 0;
+                fprintf(logFile, "\n");
+            }
+        }
+        if (fix && fout_sp) {
+            if (!node_match) {
+                fprintf(fout_sp, "%s", line);
+            }
+        }
+    }
+    if (fix && fout_sp) {
+        fclose(fout_sp);
+    }
+    if (detail) {
+        if (count_line != 0) fprintf(logFile,"\n");
+        fprintf(logFile, "---------- FLOATING COMPONENTS LIST FINISH. ----------\n*\n");
+    }
+    return 0;
+}
+
 int main(int argc, char* argv[]) {
     /////////////////////////////////////////////////////////////
     FILE *logFile = fopen("RunSummary.txt", "w");
@@ -214,6 +275,7 @@ int main(int argc, char* argv[]) {
     }
 
     FILE* fin;
+    char file_name[100];
     // recognize the user's needs
     if (argc == 1) {
         sprintf(errorMsg, "ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
@@ -222,28 +284,31 @@ int main(int argc, char* argv[]) {
         return 1;
     } else if (argc == 2) {
         fin = fopen(argv[1], "r");
+        strcpy(file_name, argv[1]);
     } else if (argc == 3) {
         if (strcmp(argv[1], "-v") == 0) detail = true;
         else if (strcmp(argv[1], "-c") == 0) fix = true;
         else if (strcmp(argv[1], "-cv") == 0 || strcmp(argv[1], "-vc") == 0) {detail = true; fix = true;}
         else {
-            sprintf(errorMsg, "2ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
+            sprintf(errorMsg, "ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
             error_state = 1;
             log_run_end(logFile, start_time, 0, error_state, errorMsg);
             return 1;
         }
         fin = fopen(argv[2], "r");
+        strcpy(file_name, argv[2]);
     } else if (argc == 4) {
         if ((strcmp(argv[1], "-v") == 0 && strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-v") == 0 && strcmp(argv[1], "-c") == 0)) {
             detail = true;
             fix = true;
         } else {
-            sprintf(errorMsg, "3ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
+            sprintf(errorMsg, "ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
             error_state = 1;
             log_run_end(logFile, start_time, 0, error_state, errorMsg);
             return 1;
         }
         fin = fopen(argv[3], "r");
+        strcpy(file_name, argv[3]);
     } else {
         sprintf(errorMsg, "ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
         error_state = 1;
@@ -320,6 +385,10 @@ int main(int argc, char* argv[]) {
     // int short_circuit_source=0;     // no consideration for source both sides connected to ground in this project!
 
     // step2: calculating the amount of short
+    if (detail) {
+        fprintf(logFile, "*\n---------- SHORT NODES LIST START: ----------\n");
+    }
+    int line_count_short = 0;
     int nShort = 0;
     // case1 -- multiple VoltSources in parallel (prior than case2)
     int* pair_count = (int*)calloc(HASH_SIZE, sizeof(int));
@@ -330,7 +399,17 @@ int main(int argc, char* argv[]) {
         int max_n = n1 > n2 ? n1 : n2;
         unsigned int h = hash(min_n * HASH_SIZE * HASH_SIZE + max_n);
         pair_count[h]++;
-        if (pair_count[h] == 2) nShort++;   // only add nShort when pair_count==2, no counting after it (even 3 or more pairs)
+        if (pair_count[h] == 2) {   // only add nShort when pair_count==2, no counting after it (even 3 or more pairs)    
+            nShort++;
+            if (detail) {
+                fprintf(logFile, "%d %d ", n1, n2);
+                line_count_short += 2;
+                if (line_count_short == 12) {
+                    fprintf(logFile, "\n");
+                    line_count_short = 0;
+                }
+            }
+        }
     }
     // case2 -- directly connect two nodes of VoltSource together
     for (int i = 0; i < nVoltS; i++) {
@@ -339,11 +418,30 @@ int main(int argc, char* argv[]) {
         int min_n = n1 < n2 ? n1 : n2;
         int max_n = n1 > n2 ? n1 : n2;
         unsigned int h = hash(min_n * HASH_SIZE * HASH_SIZE + max_n);
-        if (pair_count[h] == 1 && n1 == n2) nShort++;
+        if (pair_count[h] == 1 && n1 == n2) {
+            nShort++;
+            if (detail) {
+                fprintf(logFile, "%d ", n1);
+                line_count_short += 1;
+                if (line_count_short == 12) {
+                    fprintf(logFile, "\n");
+                    line_count_short = 0;
+                }
+            }
+        }
     }
     free(pair_count);
+    if (detail) {
+        if (line_count_short != 0) fprintf(logFile,"\n");
+        fprintf(logFile, "---------- SHORT NODES LIST FINISH. ----------\n");
+    }
+    
 
     // step3: calculating the amount of open
+    if (detail) {
+        fprintf(logFile, "*\n---------- OPEN NODES LIST START: ----------\n");
+    }
+    int line_count_open = 0;
     int nOpen = 0;
     for (int i = 0; i < nVoltS; i++) {
         int n1 = voltage_sources.elements[i].node1;
@@ -353,13 +451,33 @@ int main(int argc, char* argv[]) {
             Connection* c = node1->conns;
             int degree1 = 0;
             for (; c; c = c->next) degree1++;
-            if (degree1 == 1) nOpen++;
+            if (degree1 == 1) {
+                nOpen++;
+                if (detail) {
+                    fprintf(logFile, "%d ", n1);
+                    line_count_open += 1;
+                    if (line_count_open == 12) {
+                        fprintf(logFile, "\n");
+                        line_count_open = 0;
+                    }
+                }
+            }
 
             Node* node2 = find_or_insert_node(n2);
             c = node2->conns;
             int degree2 = 0;
             for (; c; c = c->next) degree2++;
-            if (degree2 == 1) nOpen++;
+            if (degree2 == 1) {
+                nOpen++;
+                if (detail) {
+                    fprintf(logFile, "%d ", n1);
+                    line_count_open += 1;
+                    if (line_count_open == 12) {
+                        fprintf(logFile, "\n");
+                        line_count_open = 0;
+                    }
+                }
+            }
         }
     }
     for (int i = 0; i < nCurrS; i++) {
@@ -370,14 +488,38 @@ int main(int argc, char* argv[]) {
             Connection* c = node1->conns;
             int degree1 = 0;
             for (; c; c = c->next) degree1++;
-            if (degree1 == 1) nOpen++;
+            if (degree1 == 1) {
+                nOpen++;
+                if (detail) {
+                    fprintf(logFile, "%d ", n1);
+                    line_count_open += 1;
+                    if (line_count_open == 12) {
+                        fprintf(logFile, "\n");
+                        line_count_open = 0;
+                    }
+                }
+            }
 
             Node* node2 = find_or_insert_node(n2);
             c = node2->conns;
             int degree2 = 0;
             for (; c; c = c->next) degree2++;
-            if (degree2 == 1) nOpen++;
+            if (degree2 == 1) {
+                nOpen++;
+                if (detail) {
+                    fprintf(logFile, "%d ", n1);
+                    line_count_open += 1;
+                    if (line_count_open == 12) {
+                        fprintf(logFile, "\n");
+                        line_count_open = 0;
+                    }
+                }
+            }
         }
+    }
+    if (detail) {
+        if (line_count_open != 0) fprintf(logFile,"\n");
+        fprintf(logFile, "---------- OPEN NODES LIST FINISH. ----------\n");
     }
 
     // create the graph
@@ -414,6 +556,8 @@ int main(int argc, char* argv[]) {
     bool* has_power = (bool*)calloc(num_nodes, sizeof(bool));
     bool* has_ground = (bool*)calloc(num_nodes, sizeof(bool));
     int* component = (int*)malloc(num_nodes * sizeof(int));
+    int* float_node = (int*) malloc(FLOAT_NODE_MAX * sizeof(int));
+    int float_node_index = 0;
     int comp_id = 0;
     for (int v = 0; v < num_nodes; v++) {
         if (!visited[v]) {
@@ -434,9 +578,14 @@ int main(int argc, char* argv[]) {
             int comp_n2 = component[n2];
             if (comp_n1 == comp_n2 && !has_power[comp_n1] && !has_ground[comp_n1]) {
                 nFloat++;
+                float_node[float_node_index] = n1;
+                float_node[float_node_index] = n2;
+                float_node_index += 2;
             }
         }
     }
+    process_circuit_file(detail, fix, float_node_index, float_node, logFile, file_name);
+
 
     // step5: calculating the amount of circuits
     bool* visit = (bool*)calloc(num_nodes, sizeof(bool));
@@ -504,6 +653,6 @@ int main(int argc, char* argv[]) {
     // record the end of software
     log_run_end(logFile, start_time, count_components, error_state, errorMsg);
     fclose(logFile);
-
+    
     return 0;
 }
