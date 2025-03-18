@@ -165,7 +165,21 @@ void printBorder(FILE *file) {
     fprintf(file, "\n");
 }
 
+void log_run_end(FILE* logFile, time_t start_time, int count_components, int error_state, const char* errorMsg) {
+    time_t end_time = time(NULL);
+    fprintf(logFile, "* RUN END:   %s", ctime(&end_time));
+    fprintf(logFile, "* TOTAL OPERATING DURATION: %ld seconds\n", end_time - start_time);
+    fprintf(logFile, "* TOTAL COMPONENTS: %-38d\n", count_components);
+    if (error_state == 0) {
+        fprintf(logFile, "* %s\n", "INFO: Run successfully. (0 error).");
+    } else if (error_state == 1) {
+        logSummary(logFile, errorMsg);
+    }
+    printBorder(logFile);
+}
+
 int main(int argc, char* argv[]) {
+    /////////////////////////////////////////////////////////////
     FILE *logFile = fopen("RunSummary.txt", "w");
     if (logFile == NULL) {
         printf("Can't create RunSummary.txt\n");
@@ -186,14 +200,63 @@ int main(int argc, char* argv[]) {
     strcpy(errorMsg, "Error somewhere. Need further examing!"); 
     // if the error is not specified errors we labeled, output the error info like this
 
-    if (argc != 2) {
-        sprintf(errorMsg, "ERROR Usage: %s <input.sp>\n", argv[0]);
+    ///////////////////////////////////////////////////////////////
+    bool detail = false; // state of detail analyzing mode (#output floating components; #output short nodes; #output open nodes)
+    bool fix = false;    // state of fixing mode (#delete floating components)
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-v") == 0) {
+            detail = true;
+        }
+        if (strcmp(argv[i], "-c") == 0) {
+            fix = true;
+        }
+    }
+
+    FILE* fin;
+    // recognize the user's needs
+    if (argc == 1) {
+        sprintf(errorMsg, "ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
+        error_state = 1;
+        log_run_end(logFile, start_time, 0, error_state, errorMsg);
+        return 1;
+    } else if (argc == 2) {
+        fin = fopen(argv[1], "r");
+    } else if (argc == 3) {
+        if (strcmp(argv[1], "-v") == 0) detail = true;
+        else if (strcmp(argv[1], "-c") == 0) fix = true;
+        else if (strcmp(argv[1], "-cv") == 0 || strcmp(argv[1], "-vc") == 0) {detail = true; fix = true;}
+        else {
+            sprintf(errorMsg, "2ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
+            error_state = 1;
+            log_run_end(logFile, start_time, 0, error_state, errorMsg);
+            return 1;
+        }
+        fin = fopen(argv[2], "r");
+    } else if (argc == 4) {
+        if ((strcmp(argv[1], "-v") == 0 && strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-v") == 0 && strcmp(argv[1], "-c") == 0)) {
+            detail = true;
+            fix = true;
+        } else {
+            sprintf(errorMsg, "3ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
+            error_state = 1;
+            log_run_end(logFile, start_time, 0, error_state, errorMsg);
+            return 1;
+        }
+        fin = fopen(argv[3], "r");
+    } else {
+        sprintf(errorMsg, "ERROR Usage: %s <-c /-v /-cv /-vc> <input.sp>", argv[0]);
+        error_state = 1;
+        log_run_end(logFile, start_time, 0, error_state, errorMsg);
         return 1;
     }
+
+
     // open the spice file (need to get the filename, like 'check')
-    FILE* fin = fopen(argv[1], "r");
     if (!fin) {
-        sprintf(errorMsg, "ERROR: Cannot open file %s\n", argv[1]);
+        sprintf(errorMsg, "ERROR: Cannot open file!");
+        error_state = 1;
+        log_run_end(logFile, start_time, 0, error_state, errorMsg);
         return 1;
     }
 
@@ -215,7 +278,9 @@ int main(int argc, char* argv[]) {
         double value;
         if (sscanf(line, "%*s %d %d %lf", &node1, &node2, &value) != 3) {
             sprintf(errorMsg, "ERROR: Invalid line: %s", line);
-            continue;
+            error_state = 1;
+            log_run_end(logFile, start_time, count_components, error_state, errorMsg);
+            return 1;
         } else {
             count_components++;
         }
@@ -389,6 +454,8 @@ int main(int argc, char* argv[]) {
     FILE* fout = fopen("NetlistReport.csv", "w");
     if (fout == NULL) {
         strcpy(errorMsg, "Error: Can't create file NetlistReport.csv");
+        error_state = 1;
+        log_run_end(logFile, start_time, count_components, error_state, errorMsg);
         return 1;
     }
     fprintf(fout, "nVoltS, %d\n", nVoltS);
@@ -435,17 +502,8 @@ int main(int argc, char* argv[]) {
 
 
     // record the end of software
-    time_t end_time = time(NULL);
-    fprintf(logFile, "* RUN END:   %s", ctime(&end_time));
-    fprintf(logFile, "* TOTAL OPERATING DURATION: %ld seconds\n", end_time - start_time);
-    fprintf(logFile, "* TOTAL COMPONENTS: %-38d\n", count_components);
-
-    if (error_state==0) {
-        fprintf(logFile, "* %s\n", "INFO: Run successfully. (0 error).");
-    } else if (error_state==1) {
-        logSummary(logFile, errorMsg);
-    }
-    printBorder(logFile);
+    log_run_end(logFile, start_time, count_components, error_state, errorMsg);
+    fclose(logFile);
 
     return 0;
 }
