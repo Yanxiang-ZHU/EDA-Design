@@ -29,7 +29,7 @@ gcc -o NetlistParser NetlistParser.cpp
 | `readme.md` | 解释性文件 |
 | `NetlistParser.cpp` | SPICE网表解析代码 |
 | `NetlistParser` | `NetlistParser.cpp` 的编译文件 |
-| `白盒测试` | 测试文件（作业2文件夹下的各输出由白盒测试/test文件分析得到） |
+| `whitebox` | 测试文件（作业2文件夹下的各输出由白盒测试/test文件分析得到） |
 | `NetlistReport.csv` | 输出文件：分析结果信息 |
 | `RunSummary.txt` | 输出文件：日志文件 |
 | `TrimedNetlist.sp` | 输出文件（选择性）：剔除悬空器件网表 |
