@@ -14,9 +14,9 @@ int compare(const void* a, const void* b) {
         compare = -1;
     } else if (ea->T == eb->T) {
         if (ea->type == 'A') {
-            compare = 1;
-        } else {
             compare = -1;
+        } else {
+            compare = 1;
         }
     }
     return compare;
