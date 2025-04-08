@@ -23,7 +23,7 @@ typedef struct {
     DEvent d;
 } Event;
 
-#define MAX_EVENTS 100000
+#define MAX_EVENTS 5  // actually two is enough for the queue: at most one for A and one for D
 extern Event event_queue[MAX_EVENTS];
 extern int event_count;
 
