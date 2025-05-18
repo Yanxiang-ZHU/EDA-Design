@@ -6,4 +6,4 @@ extern int tA;
 
 void read_config(const char* filename);
 
-#endif /* CONFIG_H */
+#endif

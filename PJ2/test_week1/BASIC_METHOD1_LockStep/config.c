@@ -3,17 +3,11 @@
 #include <string.h>
 #include <stdlib.h>
 
-// 全局变量定义
 double dT_A, Vth, Tsim;
 int tA;
 
 void read_config(const char* filename) {
     FILE* f = fopen(filename, "r");
-    if (f == NULL) {
-        printf("ERROR: Cannot open config file %s\n", filename);
-        exit(1);
-    }
-    
     char name[32];
     while (fscanf(f, "%s", name) != EOF) {
         if (strcmp(name, "dT") == 0) fscanf(f, "%lf", &dT_A);
@@ -25,7 +19,6 @@ void read_config(const char* filename) {
             exit(0);
         }
     }
-    
     if ((dT_A>=0.1) || (dT_A <=0.0)) {
         printf("ERROR: dT %lf is not allowed!\n", dT_A);
         exit(0);
@@ -42,6 +35,5 @@ void read_config(const char* filename) {
         printf("ERROR: tA %d is not allowed!\n", tA);
         exit(0);
     }
-    
     fclose(f);
 }
