@@ -43,7 +43,8 @@ int main() {
                 fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)\n", a.T, a.V, a.Vth, a.dT, a.bM);
             } else {
                 initial = 0;     // begin to generate the first D event
-                DEvent d0 = {0, 0, random_double(0.1, 0.3), -1};
+                DEvent DGEN = {a.T, 0, random_double(0.1, 0.3), -1};
+                d0 = DGEN;
                 Vdlast = 0;
                 fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", a.T, a.V, a.Vth, a.dT, a.bM, d0.V, d0.dT, d0.bM);
                 d_prev = d0;
@@ -62,7 +63,7 @@ int main() {
 
             // find A's progress
             // case1: 
-            if (((tD/tA)*dT_A) < d_prev.dT) {  // A not reach t[n+1]
+            if (dT_A / tA < d_prev.dT / tD) {  // A not reach t[n+1]
                 // find if any bM=1 in A's current progress
                 
                 for (i = 1; i <= (tD/tA); i++) {
@@ -74,7 +75,8 @@ int main() {
                     }
 
                     if (a_event_queue[i].bM == 1) {
-                        DEvent d = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), random_double(0.1, 0.3), -1};
+                        DEvent DGEN = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), random_double(0.1, 0.3), -1};
+                        d = DGEN;
                         fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", a_event_queue[i].T, a_event_queue[i].V, a_event_queue[i].Vth, a_event_queue[i].dT, a_event_queue[i].bM, d.V, d.dT, d.bM);
                         Vdlast = d.V;
                         d_prev = d;
@@ -88,7 +90,7 @@ int main() {
                 }
                 // no bM=1 in A's current progress
                 if (i > (tD/tA)) {
-                    for (i = (tD/tA) + 1; (i * dT_A) <= d_prev.dT; i++) {
+                    for (i = (tD/tA) + 1; (i * dT_A) <= d_prev.dT; i=i+1) {
                         // A process
                         usleep(tA * 1000);    // sleep for tA ms (tA * 1000 us)
                         wait_time += tA;
@@ -100,7 +102,8 @@ int main() {
                         }
     
                         if (a_event_queue[i].bM == 1) {
-                            DEvent d = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), random_double(0.1, 0.3), -1};
+                            DEvent DGEN = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), random_double(0.1, 0.3), -1};
+                            d = DGEN;
                             fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", a_event_queue[i].T, a_event_queue[i].V, a_event_queue[i].Vth, a_event_queue[i].dT, a_event_queue[i].bM, d.V, d.dT, d.bM);
                             Vdlast = d.V;
                             d_prev = d;
@@ -115,7 +118,8 @@ int main() {
                 }
                 // no bM=1 in A's whole progress from t[n] to t[n+1] ---- A simulation bM=-1 at t[n+1]
                 if ((i * dT_A) > d_prev.dT) {
-                    AEvent a = {0, d.V, dT_A, Vth, -1}; 
+                    AEvent AGEN = {d.T, d.V, dT_A, Vth, -1}; 
+                    a = AGEN;
                     fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", d.T, a.V, a.Vth, a.dT, a.bM, d.V, d.dT, d.bM);
                     Vdlast = d.V;
                     a_prev = a;
@@ -130,7 +134,7 @@ int main() {
             // case2:
             else {   // A already reach t[n+1]
                 // find if any bM=1 in A's total progress
-                for (i = 1; (i * dT_A) <= d_prev.dT; i++) {
+                for (i = 1; (i * dT_A) <= d_prev.dT; i=i+1) {
                     a_event_queue[i] = generate_next_A(a_event_queue[i-1], a_event_queue[i-1].T, Vth);
                     if (a_event_queue[i].T > Tsim) {
                         finish = 1;
@@ -139,7 +143,8 @@ int main() {
                     }
                     
                     if (a_event_queue[i].bM == 1) {
-                        DEvent d = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), random_double(0.1, 0.3), -1};
+                        DEvent DGEN = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), random_double(0.1, 0.3), -1};
+                        d = DGEN;
                         fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", a_event_queue[i].T, a_event_queue[i].V, a_event_queue[i].Vth, a_event_queue[i].dT, a_event_queue[i].bM, d.V, d.dT, d.bM);
                         Vdlast = d.V;
                         d_prev = d;
@@ -153,7 +158,8 @@ int main() {
                 }
                 // no bM=1 in A's total progress from t[n] to t[n+1] ---- A simulation bM=-1 at t[n+1]
                 if ((i * dT_A) > d_prev.dT) {
-                    AEvent a = {0, d.V, dT_A, Vth, -1};
+                    AEvent AGEN = {d.T, d.V, dT_A, Vth, -1};
+                    a = AGEN;
                     fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", d.T, a.V, a.Vth, a.dT, a.bM, d.V, d.dT, d.bM);
                     Vdlast = d.V;
                     a_prev = a;
@@ -170,7 +176,7 @@ int main() {
     // Add total time output before closing
     gettimeofday(&total_end, NULL);
     double total_time = (total_end.tv_sec - total_start.tv_sec) + (total_end.tv_usec - total_start.tv_usec) / 1000000.0;
-    printf("End Timing!\n\n*********TEST RESULT**********\nTotal Time:\t\t%.4f seconds\nWaiting Time:\t%.4f seconds\nRunning Time:\t%.4f seconds\n", total_time, wait_time/1000.0, total_time - wait_time/1000.0);
+    printf("End Timing!\n\n*********TEST RESULT**********\nTotal Time:\t%.4f seconds\nWaiting Time:\t%.4f seconds\nRunning Time:\t%.4f seconds\n", total_time, wait_time/1000.0, total_time - wait_time/1000.0);
     
     fprintf(fout, "%.3lf  FINISH\n", Tsim);
     fclose(fout);
