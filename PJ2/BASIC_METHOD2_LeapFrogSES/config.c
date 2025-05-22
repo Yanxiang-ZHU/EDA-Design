@@ -3,7 +3,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-// 全局变量定义
 double dT_A, Vth, Tsim;
 int tA;
 

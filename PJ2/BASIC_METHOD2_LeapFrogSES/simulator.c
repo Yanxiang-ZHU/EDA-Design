@@ -3,14 +3,10 @@
 
 AEvent a_event_queue[MAX_EVENTS_A];
 
-double random_double(double min, double max) {
-    return min + (rand() / (double)RAND_MAX) * (max - min);
-}
-
 AEvent generate_next_A(AEvent prev, double T, double Vth) {
     AEvent a;
     a.T = T + prev.dT;
-    a.V = random_double(0, 1);
+    a.V = (rand() % 1001) / 1000.0;   // a.V = 0.000 ~ 1.000, including boundary
     a.dT = prev.dT;
     a.Vth = Vth;
     
@@ -26,7 +22,7 @@ AEvent generate_next_A(AEvent prev, double T, double Vth) {
 
 DEvent generate_next_D(DEvent prev, double T) {
     DEvent d;
-    d.dT = random_double(0.1, 0.3);  // 0.100 ~ 0.299
+    d.dT = (101 + rand() % 199) / 1000.0;  // 0.101 ~ 0.299, without boundary
     d.T = T + prev.dT;
     d.V = 1 - prev.V;
     d.bM = 1;
