@@ -2,4 +2,5 @@
 *.h linguist-language=C
 *.c linguist-language=C
 *.txt linguist-language=C
+*.sp linguist-language=C
 * linguist-language=C
