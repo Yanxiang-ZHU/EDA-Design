@@ -8,7 +8,7 @@
 #include "config.h"
 #include "simulator.h"
 
-#define NUM_THREADS 10
+#define NUM_THREADS 12
 
 AEvent a;
 AEvent a_prev;
@@ -23,7 +23,19 @@ int Vdlast = 0;
 int finish = 0;
 int i = 1;
 
+// generate D events parallelly (two events a time)
+int tD_1;
+int tD_2;
+
+typedef struct {
+    double tD;
+    int idx;
+} DThreadArgs;
+
+
 AEvent first_A_events[NUM_THREADS];
+DEvent d_event_queue[3];
+
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 AEvent initialize_first_event(void) {
@@ -32,6 +44,7 @@ AEvent initialize_first_event(void) {
     return a;
 }
 
+// three queues for A and D events
 void* generate_A_parallel(void* arg) {
     int index = *(int*)arg;
     
@@ -49,6 +62,41 @@ void* generate_A_parallel(void* arg) {
     return NULL;
 }
 
+void* generate_A(void* arg) {
+    int index = *(int*)arg;
+    
+    usleep(tA * 1000);
+    pthread_mutex_lock(&lock);
+    wait_time += tA;
+    pthread_mutex_unlock(&lock);
+
+    AEvent a_parallel = generate_next_A(a, a.T, Vth);
+
+    pthread_mutex_lock(&lock);
+    a_event_queue[index] = a_parallel;
+    pthread_mutex_unlock(&lock);
+    free(arg);
+    return NULL;
+}
+
+void* generate_D (void* arg) {
+    DThreadArgs* args = (DThreadArgs*)arg;
+
+    usleep(args->tD * 1000);
+    pthread_mutex_lock(&lock);
+    wait_time += args->tD;
+    pthread_mutex_unlock(&lock);
+
+    DEvent d_parallel = generate_next_D(d, d.T);
+
+    pthread_mutex_lock(&lock);
+    d_event_queue[args->idx] = d_parallel;
+    pthread_mutex_unlock(&lock);
+    free(arg);
+    return NULL;    
+}
+
+// waiting for first D event (initialization)
 void waiting_for_first_D(FILE* fout) {
     while (initial == 1) {
         pthread_t threads[NUM_THREADS];
@@ -75,6 +123,7 @@ void waiting_for_first_D(FILE* fout) {
                     first_A_events[i].dT, first_A_events[i].bM, d0.V, d0.dT, d0.bM);
                 d_prev = d0;
                 d = generate_next_D(d0, a.T);
+                d_event_queue[0] = d;
                 a_event_queue[0] = first_A_events[i];
                 break;
             } else if (i != NUM_THREADS){
@@ -96,37 +145,6 @@ void waiting_for_first_D(FILE* fout) {
         a = first_A_events[NUM_THREADS];
     }
 }
-
-int continue_all_A (FILE* fout) {
-    if (a_event_queue[i].bM == 1) {
-        DEvent DGEN = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), (101 + rand() % 199) / 1000.0, -1};
-        d = DGEN;
-        fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", a_event_queue[i].T, a_event_queue[i].V, a_event_queue[i].Vth, a_event_queue[i].dT, a_event_queue[i].bM, d.V, d.dT, d.bM);
-        Vdlast = d.V;
-        d_prev = d;
-        d = generate_next_D(d, a_event_queue[i].T);
-        a_event_queue[0] = a_event_queue[i];
-        i = 1;
-        return 1;
-    } else {
-        fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)\n", a_event_queue[i].T, a_event_queue[i].V, a_event_queue[i].Vth, a_event_queue[i].dT, a_event_queue[i].bM);
-    }
-    return 0;
-}
-
-void D_happen (FILE* fout) {
-    AEvent AGEN = {d.T, d.V, dT_A, Vth, -1}; 
-    a = AGEN;
-    fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", d.T, a.V, a.Vth, a.dT, a.bM, d.V, d.dT, d.bM);
-    Vdlast = d.V;
-    a_prev = a;
-    a_event_queue[0] = a;
-    d_prev = d;
-    a = generate_next_A(a, d.T, Vth);  // d.T = t[n+1]
-    d = generate_next_D(d, d.T);
-    i = 1;
-}
-
 
 
 int main() {
@@ -151,89 +169,37 @@ int main() {
     while (1) {
         if (a.T > Tsim || finish) break;
 
-        tD = rand() % 10 + 1; // 1~10
-        usleep(tD * 1000);    // sleep for tD ms (tD * 1000 us)
-        wait_time += tD;
-        fprintf(fout, "***waiting for tD: %d ms***\n", tD);
+        tD_1 = rand() % 10 + 1; // 1~10
+        tD_2 = rand() % 10 + 1; // 1~10
 
-        // find A's progress
-        // case1: 
-        if (dT_A / tA < d_prev.dT / tD) {  // A not reach t[n+1]
-            // find if any bM=1 in A's current progress
-            for (i = 1; i <= (tD/tA); i++) {
-                a_event_queue[i] = generate_next_A(a_event_queue[i-1], a_event_queue[i-1].T, Vth);
-                if (a_event_queue[i].T > Tsim) {
-                    finish = 1;
-                    i = 1;
-                    break;
-                }
+        // generate two D events (and several A events) parallelly
+        pthread_t threads[NUM_THREADS];
 
-                if (continue_all_A(fout)) {
-                    break;
-                }
-            }
-            // no bM=1 in A's current progress
-            if (i > (tD/tA)) {
-                for (i = (tD/tA) + 1; (i * dT_A) <= d_prev.dT; i=i+1) {
-                    // A process
-                    if (i == (tD/tA) + 1 && (i-1) * tA != tD) {
-                        usleep((i*tA-tD) * 1000);    // sleep for tA ms (tA * 1000 us)
-                        wait_time += (i*tA-tD);
-                        fprintf(fout, "***waiting for remaining tA: %d ms***\n", (i*tA-tD));
-                    } else {
-                        usleep(tA * 1000);    // sleep for tA ms (tA * 1000 us)
-                        wait_time += tA;
-                        fprintf(fout, "***waiting for tA: %d ms***\n", tA);
-                    }
+        DThreadArgs* args_1 = malloc(sizeof(DThreadArgs));
+        args_1->tD = tD_1;
+        args_1->idx = 1;
+        pthread_create(&threads[0], NULL, generate_D, args_1);
 
-                    a_event_queue[i] = generate_next_A(a_event_queue[i-1], a_event_queue[i-1].T, Vth);
-                    if (a_event_queue[i].T > Tsim) {
-                        finish = 1;
-                        i = 1;
-                        break;
-                    }
+        DThreadArgs* args_2 = malloc(sizeof(DThreadArgs));
+        args_2->tD = tD_2;
+        args_2->idx = 2;
+        pthread_create(&threads[1], NULL, generate_D, args_2);
 
-                    if (continue_all_A(fout)) {
-                        break;
-                    }
-                }
-            }
-            // no bM=1 in A's whole progress from t[n] to t[n+1] ---- A simulation bM=-1 at t[n+1]
-            if ((i * dT_A) > d_prev.dT) {
-                if (d.T > Tsim) {
-                    finish = 1;
-                    i = 1;
-                    break;
-                }
-                D_happen(fout);
-            }
+        for (int i = 2; i < NUM_THREADS; i++) {
+            int* idx = malloc(sizeof(int));
+            *idx = i-1;   // starting from a_event_queue[1] (a_event_queue for t[n])
+            pthread_create(&threads[i], NULL, generate_A, idx);
         }
+
+        for (int i = 0; i < NUM_THREADS; i++) {
+            pthread_join(threads[i], NULL);
+        }
+
+        // further process
+        if (d_event_queue[1].)
+
         
-        // case2:
-        else {   // A already reach t[n+1]
-            // find if any bM=1 in A's total progress
-            for (i = 1; (i * dT_A) <= d_prev.dT; i=i+1) {
-                a_event_queue[i] = generate_next_A(a_event_queue[i-1], a_event_queue[i-1].T, Vth);
-                if (a_event_queue[i].T > Tsim) {
-                    finish = 1;
-                    i = 1;
-                    break;
-                }
-                
-                if (continue_all_A(fout)) {
-                    break;
-                }
-            }
-            // no bM=1 in A's total progress from t[n] to t[n+1] ---- A simulation bM=-1 at t[n+1]
-            if ((i * dT_A) > d_prev.dT) {
-                if (d.T > Tsim) {
-                    finish = 1;
-                    i = 1;
-                    break;
-                }
-                D_happen(fout);
-            }
-        }
+
     }
 
     // Add total time output before closing
