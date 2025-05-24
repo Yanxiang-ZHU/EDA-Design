@@ -90,6 +90,10 @@ int main() {
 
     a = initialize_first_event(); 
 
+    usleep(tA * 1000);    // sleep for tA ms: generate parallel A events until D happens
+    wait_time += tA;
+    fprintf(fout, "***waiting for tA: %d ms***\n", tA);
+
     while (1) {
         if (a.T > Tsim || finish) break;
 
@@ -123,9 +127,15 @@ int main() {
                 if (i > (tD/tA)) {
                     for (i = (tD/tA) + 1; (i * dT_A) <= d_prev.dT; i=i+1) {
                         // A process
-                        usleep(tA * 1000);    // sleep for tA ms (tA * 1000 us)
-                        wait_time += tA;
-                        fprintf(fout, "***waiting for tA: %d ms***\n", tA);
+                        if (i == (tD/tA) + 1 && (i-1) * tA != tD) {
+                            usleep((i*tA-tD) * 1000);    // sleep for tA ms (tA * 1000 us)
+                            wait_time += (i*tA-tD);
+                            fprintf(fout, "***waiting for remaining tA: %d ms***\n", (i*tA-tD));
+                        } else {
+                            usleep(tA * 1000);    // sleep for tA ms (tA * 1000 us)
+                            wait_time += tA;
+                            fprintf(fout, "***waiting for tA: %d ms***\n", tA);
+                        }
 
                         a_event_queue[i] = generate_next_A(a_event_queue[i-1], a_event_queue[i-1].T, Vth);
                         if (a_event_queue[i].T > Tsim) {
