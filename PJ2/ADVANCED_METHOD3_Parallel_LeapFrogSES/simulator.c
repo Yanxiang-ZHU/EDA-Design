@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
+#include "config.h"
 
 
 AEvent a_event_queue[MAX_EVENTS_A];
@@ -17,7 +18,7 @@ AEvent generate_next_A(AEvent prev, double T, double Vth) {
     a.T = T + prev.dT;
     unsigned int seed = generate_seed();
     a.V = (rand_r(&seed) % 1001) / 1000.0;   // a.V = 0.000 ~ 1.000, including boundary
-    a.dT = prev.dT;
+    a.dT = dT_A;
     a.Vth = Vth;
     
     if ((prev.V <= Vth && a.V > Vth) || (prev.V > Vth && a.V <= Vth)) {
