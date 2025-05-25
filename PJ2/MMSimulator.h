@@ -9,6 +9,5 @@ extern DEvent d;
 
 extern int initial;
 extern int Vdlast;
-extern int finish;
 
 #endif
