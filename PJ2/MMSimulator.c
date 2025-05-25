@@ -16,9 +16,8 @@ AEvent a;
 DEvent d0;
 DEvent d;
 
-int initial = 1;
-int Vdlast = 0;
-int finish = 0;
+int initial;
+int Vdlast;
 
 // generate D events parallelly (two events a time)
 int tD_1;
@@ -147,14 +146,19 @@ int main() {
     srand(time(NULL));
 
     // test the total time
-    struct timeval total_start={0}, total_end={0};
-    gettimeofday(&total_start, NULL);
+    // struct timeval total_start={0}, total_end={0};
+    // gettimeofday(&total_start, NULL);
 
     // read config from text
     read_config("con.txt");
     FILE* fout = fopen("sim_res.txt", "w");
 
     int i;
+    int finish = 0;
+
+    initial = 1;
+    Vdlast = 0;
+    
     a = initialize_first_event(); 
 
     if (initial == 1) {
@@ -330,10 +334,10 @@ int main() {
         }
     }
 
-    // Add total time output before closing
-    gettimeofday(&total_end, NULL);
-    double total_time = (total_end.tv_sec - total_start.tv_sec) + (total_end.tv_usec - total_start.tv_usec) / 1000000.0;
-    printf("\n*********TEST RESULT**********\nTotal Time:  \t%.4f seconds\n", total_time);
+    // // Add total time output before closing
+    // gettimeofday(&total_end, NULL);
+    // double total_time = (total_end.tv_sec - total_start.tv_sec) + (total_end.tv_usec - total_start.tv_usec) / 1000000.0;
+    // printf("\n*********TEST RESULT**********\nTotal Time:  \t%.4f seconds\n", total_time);
     
     char buffer[MAX_BUFFER_SIZE];
     int written = snprintf(buffer, MAX_BUFFER_SIZE, "%.3lf  FINISH\n", Tsim);
