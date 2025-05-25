@@ -9,7 +9,6 @@
 #include "simulator.h"
 
 #define NUM_THREADS 12
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 
 AEvent a;
@@ -19,7 +18,6 @@ DEvent d;
 
 int tD = 0;
 int initial = 1;
-int wait_time = 0;
 int Vdlast = 0;
 int finish = 0;
 int i = 1;
@@ -53,7 +51,6 @@ void* generate_A_parallel(void* arg) {
     
     usleep(tA * 1000);
     pthread_mutex_lock(&lock);
-    wait_time += tA;
     pthread_mutex_unlock(&lock);
 
     AEvent a_parallel = generate_next_A(a, a.T, Vth);
@@ -70,7 +67,6 @@ void* generate_A(void* arg) {
     
     usleep(tA * 1000);
     pthread_mutex_lock(&lock);
-    wait_time += tA;
     pthread_mutex_unlock(&lock);
 
     AEvent a_parallel = generate_next_A(a, a.T, Vth);
@@ -87,7 +83,6 @@ void* generate_D (void* arg) {
 
     usleep(args->tD * 1000);
     pthread_mutex_lock(&lock);
-    wait_time += args->tD;
     pthread_mutex_unlock(&lock);
 
     DEvent d_parallel = generate_next_D(d, d.T);
@@ -233,11 +228,13 @@ int main() {
                 for (int j = 1; j < i; j++) {
                     fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)\n", a_event_queue[j].T, a_event_queue[j].V, a_event_queue[j].Vth, a_event_queue[j].dT, a_event_queue[j].bM);
                 }
+                d_event_queue[1].V = 1 - Vdlast;
                 // set up backup point
                 Vdlast = d_event_queue[1].V;
                 check_point = i;
                 // change a.T
                 a_event_queue[i].T = d_event_queue[1].T;
+                a_event_queue[i].V = d_event_queue[1].V;
                 a_event_queue[i].bM = -1;
                 for (int j = i+1; j < num_threads-1; j++) {
                     a_event_queue[j].T = a_event_queue[j-1].T + a_event_queue[j-1].dT;
@@ -249,11 +246,11 @@ int main() {
                 for (int j = check_point + 1; j < i; j++) {
                     fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)\n", a_event_queue[j].T, a_event_queue[j].V, a_event_queue[j].Vth, a_event_queue[j].dT, a_event_queue[j].bM);
                 }
+                d_event_queue[2].V = 1 - Vdlast;
                 Vdlast = d_event_queue[2].V;
                 AEvent AGEN = {d_event_queue[2].T, d_event_queue[2].V, dT_A, Vth, -1}; 
-                a = AGEN;
-                fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", d_event_queue[2].T, a.V, a.Vth, a.dT, a.bM, d_event_queue[2].V, d_event_queue[2].dT, d_event_queue[2].bM);
-                a_event_queue[0] = a;
+                a_event_queue[0] = AGEN;
+                fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)  D(%d %.3lf %-2d)\n", d_event_queue[2].T, a_event_queue[0].V, a_event_queue[0].Vth, a_event_queue[0].dT, a_event_queue[0].bM, d_event_queue[2].V, d_event_queue[2].dT, d_event_queue[2].bM);
                 d_event_queue[0] = d_event_queue[2];
                 break;
             } else if (i == num_threads-1) {
@@ -261,6 +258,15 @@ int main() {
                 d_event_queue[0] = d_event_queue[1];
                 break;
             } else if ((a_event_queue[i].V <= Vth && a_event_queue[i-1].V > Vth) || (a_event_queue[i].V > Vth && a_event_queue[i-1].V <= Vth)) {
+                if (loc == 1) {
+                    for (int j = 1; j < i; j++) {
+                        fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)\n", a_event_queue[j].T, a_event_queue[j].V, a_event_queue[j].Vth, a_event_queue[j].dT, a_event_queue[j].bM);
+                    }
+                } else if (loc == 2) {
+                    for (int j = check_point + 1; j < i; j++) {
+                        fprintf(fout, "%.3lf  A(%.3lf %.3lf %.3lf %-2d)\n", a_event_queue[j].T, a_event_queue[j].V, a_event_queue[j].Vth, a_event_queue[j].dT, a_event_queue[j].bM);
+                    }
+                }
                 a_event_queue[i].bM = 1;
                 DEvent DGEN = {a_event_queue[i].T, Vdlast * (int)(a_event_queue[i].V >= a_event_queue[i].Vth), (101 + rand() % 199) / 1000.0, -1};
                 Vdlast = d_event_queue[0].V;
@@ -275,7 +281,7 @@ int main() {
     // Add total time output before closing
     gettimeofday(&total_end, NULL);
     double total_time = (total_end.tv_sec - total_start.tv_sec) + (total_end.tv_usec - total_start.tv_usec) / 1000000.0;
-    printf("End Timing!\n\n*********TEST RESULT**********\nTotal Time:  \t%.4f seconds\nWaiting Time:\t%.4f seconds\nRunning Time:\t%.4f  seconds\n", total_time, wait_time/1000.0, total_time - wait_time/1000.0);
+    printf("End Timing!\n\n*********TEST RESULT**********\nTotal Time:  \t%.4f seconds\n", total_time);
     
     fprintf(fout, "%.3lf  FINISH\n", Tsim);
     fclose(fout);

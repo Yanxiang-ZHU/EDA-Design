@@ -11,7 +11,6 @@ extern DEvent d_prev;
 
 extern int tD;
 extern int initial;
-extern int wait_time;
 extern int Vdlast;
 extern int finish;
 extern int i;
