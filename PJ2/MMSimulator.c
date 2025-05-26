@@ -210,7 +210,9 @@ int main() {
         // bM updata
         for (int i = 1; i < num_threads-1; i++) {
             if (a_event_queue[i].T > Tsim) {
+
                 finish = 1;
+                fprintf(fout, "");
                 // print all the stored A events before Tsim
                 if (loc == 1) {
                     for (int j = 1; j < i; j++) {
