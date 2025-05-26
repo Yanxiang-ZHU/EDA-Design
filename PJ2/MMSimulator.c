@@ -94,10 +94,10 @@ void waiting_for_first_D(FILE* fout) {
         for (int i = 1; i <= NUM_THREADS; i++) {
             int* idx = malloc(sizeof(int));
             *idx = i;
-            pthread_create(&threads[i], NULL, generate_A_parallel, idx);
+            pthread_create(&threads[i-1], NULL, generate_A_parallel, idx);
         }
         for (int i = 1; i <= NUM_THREADS; i++) {
-            pthread_join(threads[i], NULL);
+            pthread_join(threads[i-1], NULL);
         }
 
         // further process
@@ -158,7 +158,7 @@ int main() {
 
     initial = 1;
     Vdlast = 0;
-    
+
     a = initialize_first_event(); 
 
     if (initial == 1) {
