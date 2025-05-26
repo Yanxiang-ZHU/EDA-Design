@@ -28,8 +28,7 @@ typedef struct {
     int idx;
 } DThreadArgs;
 
-int check_point;
-int loc;
+
 
 AEvent first_A_events[NUM_THREADS];
 DEvent d_event_queue[3];
@@ -155,6 +154,8 @@ int main() {
 
     int i;
     int finish = 0;
+    int loc = 1;
+    int check_point;
 
     initial = 1;
     Vdlast = 0;
@@ -339,11 +340,7 @@ int main() {
     // double total_time = (total_end.tv_sec - total_start.tv_sec) + (total_end.tv_usec - total_start.tv_usec) / 1000000.0;
     // printf("\n*********TEST RESULT**********\nTotal Time:  \t%.4f seconds\n", total_time);
     
-    char buffer[MAX_BUFFER_SIZE];
-    int written = snprintf(buffer, MAX_BUFFER_SIZE, "%.3lf  FINISH\n", Tsim);
-    if (written > 0) {
-        fwrite(buffer, sizeof(char), (size_t)written, fout);
-    }
+    fprintf(fout, "%.3lf  FINISH\n", Tsim); 
 
     fclose(fout);
     return 0;
